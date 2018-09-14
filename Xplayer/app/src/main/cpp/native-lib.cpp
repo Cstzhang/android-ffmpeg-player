@@ -24,14 +24,29 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     avformat_network_init();
     //3 open file
     AVFormatContext *ic = NULL;
-    char path[] = "/sdcard/cat1.mp4";
+    char path[] = "/sdcard/cat.mp4";
     int re = avformat_open_input(&ic,path,0,0);
-    if (re == 0){
-
-        LOGW("avformat_open_input %s success",path);
-    } else{
+    if (re != 0){
         LOGW("avformat_open_input failed :%s",av_err2str(re));
     }
+    LOGW("avformat_open_input %s success",path);
+    // find info (The file does not contain header info )
+    re = avformat_find_stream_info(ic,0);
+    if (re != 0){
+        LOGW("avformat_find_stream_info failed :%s",av_err2str(re));
+    }
+    LOGW("duration = %lld nb_streams %d",ic->duration,ic->nb_streams);
+    //close ic
+    avformat_close_input(&ic);
+
+
+
+
+
+
+
+
+
 
 
 
