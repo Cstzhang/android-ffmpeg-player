@@ -6,7 +6,7 @@
 extern "C"{
 
 #include <libavcodec/avcodec.h>
-
+#include <libavformat/avformat.h>
 }
 
 
@@ -18,6 +18,29 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
         jobject /* this */) {
     std::string hello = "Hello from C++";
     hello += avcodec_configuration();
+    //1 register
+    av_register_all();
+    //2 init network
+    avformat_network_init();
+    //3 open file
+    AVFormatContext *ic = NULL;
+    char path[] = "/sdcard/cat1.mp4";
+    int re = avformat_open_input(&ic,path,0,0);
+    if (re == 0){
+
+        LOGW("avformat_open_input %s success",path);
+    } else{
+        LOGW("avformat_open_input failed :%s",av_err2str(re));
+    }
+
+
+
+
+
+
+
+
+
     return env->NewStringUTF(hello.c_str());
 }
 
@@ -37,4 +60,6 @@ Java_xplayer_xplayer_MainActivity_open(JNIEnv *env, jobject instance, jstring ur
     }
 
     env->ReleaseStringUTFChars(url_, url);
+
+    return true;
 }
