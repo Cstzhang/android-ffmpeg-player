@@ -18,6 +18,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Example of a call to a native method
         TextView tv = (TextView) findViewById(R.id.sample_text);
+//        open("/sdcard/cat.mp4",this);
         tv.setText(stringFromJNI());
     }
 
