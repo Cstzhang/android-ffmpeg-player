@@ -9,9 +9,15 @@ extern "C"{
 #include <libavformat/avformat.h>
 }
 
+#include <iostream>
+using  namespace std;
+
+static double r2d(AVRational r){
+    return  r.num == 0 || r.den == 0 ? 0:(double)r.num/(double)r.den;
+}
+
 
 extern "C" JNIEXPORT jstring
-
 JNICALL
 Java_xplayer_xplayer_MainActivity_stringFromJNI(
         JNIEnv *env,
@@ -36,25 +42,47 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
         LOGW("avformat_find_stream_info failed :%s",av_err2str(re));
     }
     LOGW("duration = %lld nb_streams %d",ic->duration,ic->nb_streams);
+    int fps = 0;
+    int videoStream = 0;
+    int audioStream = 0;
+
+    for (int i = 0; i <ic->nb_streams ; ++i) {
+        AVStream *as = ic->streams[i];
+        if (as->codecpar->codec_type == AVMEDIA_TYPE_VIDEO){
+            LOGW("视频数据");
+            videoStream = i;
+            fps = r2d(as->avg_frame_rate);
+            LOGW("fps = %d \n width = %d \n height = %d \n codeid = %d \n  pixformat %d \n",fps,
+                 as->codecpar->width,
+                 as->codecpar->height,
+                 as->codecpar->codec_id,
+                 as->codecpar->format);
+
+        }else if (as->codecpar->codec_type == AVMEDIA_TYPE_AUDIO){
+            LOGW("音频数据");
+            audioStream = i;
+            LOGW("sample_rate %d \n channels =%d \n sample_format= %d",
+            as->codecpar->sample_rate,
+            as->codecpar->channels,
+            as->codecpar->format);
+        }
+    }
+    //获取音频流信息
+    audioStream = av_find_best_stream(ic,AVMEDIA_TYPE_AUDIO,-1,-1,NULL,0);
+    LOGW("av_find_best_stream audioStream :%d",audioStream);
+
+
+
+
+
+
+
+
+
+
+
     //close ic
     avformat_close_input(&ic);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     return env->NewStringUTF(hello.c_str());
 }
