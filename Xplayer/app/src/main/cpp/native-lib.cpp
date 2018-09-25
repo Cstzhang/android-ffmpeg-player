@@ -7,7 +7,13 @@ extern "C"{
 
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavcodec/jni.h>
+#include <libswscale/swscale.h>
 }
+
+
+
+
 
 #include <iostream>
 using  namespace std;
@@ -25,7 +31,17 @@ long long getNowMs(){
     return t;
 }
 
-extern "C" JNIEXPORT jstring
+
+extern  "C"
+JNIEXPORT
+jint JNI_OnLoad(JavaVM *vm, void *res){
+    av_jni_set_java_vm(vm,0);
+    return JNI_VERSION_1_4;
+
+}
+
+extern "C"
+JNIEXPORT jstring
 JNICALL
 Java_xplayer_xplayer_MainActivity_stringFromJNI(
         JNIEnv *env,
@@ -47,7 +63,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     //封装格式上下文
     AVFormatContext *ic = NULL;
 
-    char path[] = "/sdcard/cat.mp4";
+    char path[] = "/sdcard/test.mp4";
     /*
       • AVFormatContext **ps  传指针的地址
       • const char *url   文件路径（本地的或者网络的http rtsp 地址会被存在AVFormatContext 结构体的 fileName中）
@@ -124,7 +140,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     //软解码
     AVCodec *codec = avcodec_find_decoder(ic->streams[videoStream]->codecpar->codec_id);
     //硬解码
-//        codec = avcodec_find_decoder_by_name("h264");
+//    codec = avcodec_find_decoder_by_name("h264_mediacodec");//
     if(!codec) {
         LOGW("avcodec_find_decoder videoStream fail!");
         return  env->NewStringUTF(hello.c_str());
@@ -145,7 +161,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     //软解码
     AVCodec *acodec = avcodec_find_decoder(ic->streams[audioStream]->codecpar->codec_id);
     //硬解码
-//        acodec = avcodec_find_decoder_by_name("h264");
+
     if(!acodec) {
         LOGW("avcodec_find_decoder audioStream fail!");
         return  env->NewStringUTF(hello.c_str());
@@ -167,6 +183,14 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     AVFrame  *frame = av_frame_alloc();
     long long start = getNowMs();
     int frameCount = 0;
+    char *rgb = new char[1920*1080*4];
+
+    //初始化像素格式转换的上下文
+    SwsContext *vctx = NULL;
+    int outWith = 1280;
+    int outHeight = 720;
+
+
     for (;;)
     {
 
@@ -179,7 +203,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
         int re = av_read_frame(ic,pkt);
 
         if (re != 0){
-           LOGW("read to end ");
+           // LOGW("read to end ");
             int pos = 3 * r2d(ic->streams[videoStream]->time_base) ;
             av_seek_frame(ic,videoStream,pos,AVSEEK_FLAG_BACKWARD|AVSEEK_FLAG_FRAME);
             continue;
@@ -206,6 +230,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
             LOGW("avcodec_send_packet faild!");
             continue;
         }
+
         for (;;) {
 
         re = avcodec_receive_frame(cc,frame);
@@ -216,6 +241,32 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
            // LOGW("avcodec_receive_frame %lld",frame->pts);
             if (cc == vc){//如果是视频帧
                 frameCount++;
+                vctx = sws_getCachedContext(vctx,
+                                            frame->width,
+                                            frame->height,
+                                            (AVPixelFormat)frame->format,
+                                            outWith,outHeight,
+                                            AV_PIX_FMT_RGBA,
+                                            SWS_FAST_BILINEAR,
+                                            0,0,0);
+                if (!vctx){
+                    LOGW("sws_getCachedContext failed !");
+                } else{
+                    uint8_t *data[AV_NUM_DATA_POINTERS] = {0};
+                    data[0]= (uint8_t *)rgb;
+                    int lines[AV_NUM_DATA_POINTERS] = {0};
+                    lines[0] = outWith *4;
+                    int h  = sws_scale(vctx,
+                                       (const uint8_t **)frame->data,
+                                       frame->linesize,
+                                       0,
+                                       frame->height,
+                                       data,
+                                       lines);
+                    LOGW("sws_scale h = %d",h);
+                }
+
+
             }
 
         }
