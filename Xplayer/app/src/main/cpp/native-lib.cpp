@@ -9,6 +9,7 @@ extern "C"{
 #include <libavformat/avformat.h>
 #include <libavcodec/jni.h>
 #include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
 }
 
 
@@ -184,11 +185,30 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     long long start = getNowMs();
     int frameCount = 0;
     char *rgb = new char[1920*1080*4];
+    char *pcm = new char[48000*4*2];
 
     //初始化像素格式转换的上下文
     SwsContext *vctx = NULL;
     int outWith = 1280;
     int outHeight = 720;
+
+    //音频重采样上下文
+    SwrContext *actx = swr_alloc();
+    actx = swr_alloc_set_opts(actx,
+                              av_get_default_channel_layout(ac->channels),//输出通道数
+                                AV_SAMPLE_FMT_S16,//输出格式
+                                ac->sample_rate,//样本率
+                                av_get_default_channel_layout(ac->channels),//输出
+                                ac->sample_fmt,//输出
+                                ac->sample_rate,//输出
+                                0,0);
+    re = swr_init(actx);
+    if  (re != 0){
+        LOGW("swr_init failed !");
+    }else{
+        LOGW("swr_init success !");
+    }
+
 
 
     for (;;)
@@ -267,17 +287,32 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
                 }
 
 
+            }else{//音频
+                //音频重采样
+                uint8_t *out[2] = {0};
+                out[0] = (uint8_t *)pcm;
+                int len = swr_convert(actx,
+                                      out,
+                                      frame->nb_samples,
+                                      (const uint8_t **)frame->data,
+                                      frame->nb_samples);
+                LOGW("swr_convert = %d",len);
+                
             }
+
 
         }
         av_packet_unref(pkt);
 
     }
+    delete rgb;
+    delete pcm;
 
     //close ic
     avformat_close_input(&ic);
 
     return env->NewStringUTF(hello.c_str());
+
 }
 
 extern "C"
