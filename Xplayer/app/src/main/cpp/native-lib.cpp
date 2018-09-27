@@ -1,6 +1,8 @@
 #include <jni.h>
 #include <string>
 #include <android/log.h>
+#include <android/native_window.h>
+#include <android/native_window_jni.h>
 #define  LOGW(...) __android_log_print(ANDROID_LOG_ERROR,"testFF",__VA_ARGS__)
 
 extern "C"{
@@ -49,8 +51,36 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
         jobject /* this */) {
 
     std::string hello = "Hello from C++";
-
     hello += avcodec_configuration();
+    return env->NewStringUTF(hello.c_str());
+
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_xplayer_xplayer_MainActivity_open(JNIEnv *env, jobject instance, jstring url_,
+                                       jobject handle) {
+    const char *url = env->GetStringUTFChars(url_, 0);
+
+    // TODO
+    FILE *fp = fopen(url,"rb");
+    if (!fp){
+        LOGW("%s open failed!",url);
+    } else{
+        LOGW("%s open success!",url);
+        fclose(fp);
+    }
+
+    env->ReleaseStringUTFChars(url_, url);
+
+    return true;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_xplayer_xplayer_XPlay_Open(JNIEnv *env, jobject instance, jstring url_, jobject surface) {
+    const char *path = env->GetStringUTFChars(url_, 0);
+
 
     //初始化解封装
     //av_register_all();
@@ -64,7 +94,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     //封装格式上下文
     AVFormatContext *ic = NULL;
 
-    char path[] = "/sdcard/test.mp4";
+//    char path[] = path;
     /*
       • AVFormatContext **ps  传指针的地址
       • const char *url   文件路径（本地的或者网络的http rtsp 地址会被存在AVFormatContext 结构体的 fileName中）
@@ -75,7 +105,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
 
     if (re != 0){
         LOGW("avformat_open_input failed!:%s",av_err2str(re));
-        return env->NewStringUTF(hello.c_str());
+        return ;
     }
 
     LOGW("avformat_open_input %s success",path);
@@ -144,7 +174,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
 //    codec = avcodec_find_decoder_by_name("h264_mediacodec");//
     if(!codec) {
         LOGW("avcodec_find_decoder videoStream fail!");
-        return  env->NewStringUTF(hello.c_str());
+        return ;
     }
     //解码器初始化
     AVCodecContext *vc = avcodec_alloc_context3(codec);
@@ -155,7 +185,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     re = avcodec_open2(vc,0,0);
     if (re != 0) {
         LOGW("avcodec_open2 videoStream fail!");
-        return  env->NewStringUTF(hello.c_str());
+        return  ;
     }
 
     //音频解码器
@@ -165,7 +195,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
 
     if(!acodec) {
         LOGW("avcodec_find_decoder audioStream fail!");
-        return  env->NewStringUTF(hello.c_str());
+        return ;
     }
     //解码器初始化
     AVCodecContext *ac = avcodec_alloc_context3(acodec);
@@ -176,7 +206,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     re = avcodec_open2(ac,0,0);
     if (re != 0) {
         LOGW("avcodec_open2 audioStream fail!");
-        return  env->NewStringUTF(hello.c_str());
+        return  ;
     }
 
     //read ic
@@ -196,12 +226,12 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     SwrContext *actx = swr_alloc();
     actx = swr_alloc_set_opts(actx,
                               av_get_default_channel_layout(ac->channels),//输出通道数
-                                AV_SAMPLE_FMT_S16,//输出格式
-                                ac->sample_rate,//样本率
-                                av_get_default_channel_layout(ac->channels),//输出
-                                ac->sample_fmt,//输出
-                                ac->sample_rate,//输出
-                                0,0);
+                              AV_SAMPLE_FMT_S16,//输出格式
+                              ac->sample_rate,//样本率
+                              av_get_default_channel_layout(ac->channels),//输出
+                              ac->sample_fmt,//输出
+                              ac->sample_rate,//输出
+                              0,0);
     re = swr_init(actx);
     if  (re != 0){
         LOGW("swr_init failed !");
@@ -210,7 +240,14 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     }
 
 
+    //显示窗口初始化
+    ANativeWindow *nwin = ANativeWindow_fromSurface(env,surface);
+    ANativeWindow_setBuffersGeometry(nwin,outWith,outHeight,WINDOW_FORMAT_RGBA_8888);
+    ANativeWindow_Buffer wbuf;
 
+
+
+    //
     for (;;)
     {
 
@@ -223,18 +260,11 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
         int re = av_read_frame(ic,pkt);
 
         if (re != 0){
-           // LOGW("read to end ");
+            // LOGW("read to end ");
             int pos = 3 * r2d(ic->streams[videoStream]->time_base) ;
             av_seek_frame(ic,videoStream,pos,AVSEEK_FLAG_BACKWARD|AVSEEK_FLAG_FRAME);
             continue;
         }
-//        LOGW("stream = %d size =%d pts=%lld flag=%d",
-//             pkt->stream_index,pkt->size,pkt->pts,pkt->flags
-//        );
-
-//        if (pkt->stream_index != videoStream){
-//            continue;
-//        }
 
         AVCodecContext *cc = vc;
         if (pkt->stream_index == audioStream){
@@ -253,12 +283,12 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
 
         for (;;) {
 
-        re = avcodec_receive_frame(cc,frame);
-         if (re != 0){
-             //LOGW("avcodec_receive_frame faild!");
-             break;
-         }
-           // LOGW("avcodec_receive_frame %lld",frame->pts);
+            re = avcodec_receive_frame(cc,frame);
+            if (re != 0){
+                //LOGW("avcodec_receive_frame faild!");
+                break;
+            }
+            // LOGW("avcodec_receive_frame %lld",frame->pts);
             if (cc == vc){//如果是视频帧
                 frameCount++;
                 vctx = sws_getCachedContext(vctx,
@@ -284,6 +314,14 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
                                        data,
                                        lines);
                     LOGW("sws_scale h = %d",h);
+                    if (h > 0){//显示
+                        //锁住取值空间
+                        ANativeWindow_lock(nwin,&wbuf,0);
+                        uint8_t  *dst = (uint8_t *)wbuf.bits; //内存地址空间
+                        memcpy(dst,rgb,outWith*outHeight*4);
+                        ANativeWindow_unlockAndPost(nwin);
+
+                    }
                 }
 
 
@@ -297,7 +335,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
                                       (const uint8_t **)frame->data,
                                       frame->nb_samples);
                 LOGW("swr_convert = %d",len);
-                
+
             }
 
 
@@ -311,26 +349,7 @@ Java_xplayer_xplayer_MainActivity_stringFromJNI(
     //close ic
     avformat_close_input(&ic);
 
-    return env->NewStringUTF(hello.c_str());
 
-}
 
-extern "C"
-JNIEXPORT jboolean JNICALL
-Java_xplayer_xplayer_MainActivity_open(JNIEnv *env, jobject instance, jstring url_,
-                                       jobject handle) {
-    const char *url = env->GetStringUTFChars(url_, 0);
-
-    // TODO
-    FILE *fp = fopen(url,"rb");
-    if (!fp){
-        LOGW("%s open failed!",url);
-    } else{
-        LOGW("%s open success!",url);
-        fclose(fp);
-    }
-
-    env->ReleaseStringUTFChars(url_, url);
-
-    return true;
+    env->ReleaseStringUTFChars(url_, path);
 }
